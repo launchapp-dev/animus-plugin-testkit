@@ -1,0 +1,19 @@
+name: streaming-long
+description: Long streaming completion (~300 deltas) to exercise buffering and back-pressure.
+timeout_ms: 15000
+method: run
+request:
+  prompt: "stream a lot"
+  model: claude-sonnet-4-6
+expected_notifications:
+  - kind: output
+    contains: "token0"
+  - kind: output
+    contains: "token299"
+expected_response:
+  output_contains: "token299"
+  min_output_len: 1000
+  exit_code: 0
+mock:
+  tool: claude
+  mock_scenario: streaming-long

@@ -1,0 +1,16 @@
+[package]
+name = "mock-cli-claude"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+description = "Mock `claude` CLI emitting canonical stream-json output for plugin conformance tests."
+
+[[bin]]
+name = "mock-claude"
+path = "src/main.rs"
+
+[dependencies]
+serde_json = { workspace = true }

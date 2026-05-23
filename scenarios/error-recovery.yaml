@@ -1,0 +1,19 @@
+name: error-recovery
+description: Malformed mid-stream line must be ignored; provider keeps streaming and finishes.
+timeout_ms: 10000
+method: run
+request:
+  prompt: "do work"
+  model: claude-sonnet-4-6
+allow_extra_notifications: true
+expected_notifications:
+  - kind: output
+    contains: "Working"
+  - kind: output
+    contains: "recovered"
+expected_response:
+  output_contains: "recovered"
+  exit_code: 0
+mock:
+  tool: claude
+  mock_scenario: error-recovery

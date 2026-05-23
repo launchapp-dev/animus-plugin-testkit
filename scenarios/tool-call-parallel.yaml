@@ -1,0 +1,22 @@
+name: tool-call-parallel
+description: Two concurrent tool_use blocks resolved in one tool_result envelope.
+timeout_ms: 10000
+method: run
+request:
+  prompt: "run parallel"
+  model: claude-sonnet-4-6
+expected_notifications:
+  - kind: output
+  - kind: tool_call
+    name: shell
+  - kind: tool_call
+    name: shell
+  - kind: tool_result
+  - kind: tool_result
+  - kind: output
+expected_response:
+  output_contains: "complete"
+  exit_code: 0
+mock:
+  tool: claude
+  mock_scenario: tool-call-parallel

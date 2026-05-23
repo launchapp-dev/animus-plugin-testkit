@@ -1,0 +1,19 @@
+name: streaming-medium
+description: Medium streaming completion (~40 deltas).
+timeout_ms: 10000
+method: run
+request:
+  prompt: "list 40 words"
+  model: claude-sonnet-4-6
+expected_notifications:
+  - kind: output
+    contains: "word0"
+  - kind: output
+    contains: "word39"
+expected_response:
+  output_contains: "word39"
+  min_output_len: 100
+  exit_code: 0
+mock:
+  tool: claude
+  mock_scenario: streaming-medium

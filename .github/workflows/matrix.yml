@@ -1,0 +1,46 @@
+name: provider-matrix
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 7 * * 1"
+
+jobs:
+  matrix:
+    name: conformance against ${{ matrix.plugin }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        plugin:
+          - animus-provider-claude
+          - animus-provider-codex
+          - animus-provider-gemini
+          - animus-provider-opencode
+          - animus-provider-oai
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: testkit
+      - uses: actions/checkout@v4
+        with:
+          repository: launchapp-dev/${{ matrix.plugin }}
+          path: plugin
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build mocks + harness
+        working-directory: testkit
+        run: cargo build --release --workspace
+      - name: Build plugin
+        working-directory: plugin
+        run: cargo build --release
+      - name: Run conformance
+        working-directory: testkit
+        run: |
+          ./target/release/animus-plugin-harness \
+            conformance \
+            --plugin "../plugin/target/release/${{ matrix.plugin }}" \
+            --report-json "./report-${{ matrix.plugin }}.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: report-${{ matrix.plugin }}
+          path: testkit/report-${{ matrix.plugin }}.json

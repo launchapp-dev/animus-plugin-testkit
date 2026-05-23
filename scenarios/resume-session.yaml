@@ -1,0 +1,19 @@
+name: resume-session
+description: Resume an existing session id and stream a fresh short completion.
+timeout_ms: 8000
+method: resume
+request:
+  prompt: "continue"
+  model: claude-sonnet-4-6
+  session_id: "mock-session-resume-session"
+requires_capabilities:
+  - agent/resume
+expected_notifications:
+  - kind: output
+    contains: "Hello"
+expected_response:
+  output_contains: "Hello"
+  exit_code: 0
+mock:
+  tool: claude
+  mock_scenario: resume-session

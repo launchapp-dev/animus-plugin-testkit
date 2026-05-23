@@ -1,0 +1,19 @@
+name: tool-call-single
+description: Single tool_use + tool_result round-trip surrounded by output deltas.
+timeout_ms: 10000
+method: run
+request:
+  prompt: "list files"
+  model: claude-sonnet-4-6
+expected_notifications:
+  - kind: output
+  - kind: tool_call
+    name: shell
+  - kind: tool_result
+  - kind: output
+expected_response:
+  output_contains: "done"
+  exit_code: 0
+mock:
+  tool: claude
+  mock_scenario: tool-call-single

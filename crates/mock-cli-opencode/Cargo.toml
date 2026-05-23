@@ -1,0 +1,16 @@
+[package]
+name = "mock-cli-opencode"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+description = "Mock `opencode` CLI emitting canonical text events for plugin conformance tests."
+
+[[bin]]
+name = "mock-opencode"
+path = "src/main.rs"
+
+[dependencies]
+serde_json = { workspace = true }

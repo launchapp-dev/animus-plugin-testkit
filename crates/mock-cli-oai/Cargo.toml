@@ -1,0 +1,21 @@
+[package]
+name = "mock-cli-oai"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+description = "Mock OpenAI-compatible HTTP server emitting canonical SSE streams for plugin conformance tests."
+
+[[bin]]
+name = "mock-oai"
+path = "src/main.rs"
+
+[dependencies]
+axum       = { workspace = true }
+tokio        = { workspace = true }
+tokio-stream = "0.1"
+serde        = { workspace = true }
+serde_json   = { workspace = true }
+anyhow       = { workspace = true }

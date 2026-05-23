@@ -1,0 +1,21 @@
+[package]
+name = "provider-conformance"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+description = "Re-usable baseline conformance scenarios for Animus provider plugins."
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+testkit-core = { path = "../testkit-core" }
+serde_yaml   = { workspace = true }
+anyhow       = { workspace = true }
+once_cell    = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

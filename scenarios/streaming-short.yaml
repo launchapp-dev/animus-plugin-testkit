@@ -1,0 +1,17 @@
+name: streaming-short
+description: Short streaming completion (3 deltas) ending with final aggregated text.
+timeout_ms: 8000
+method: run
+request:
+  prompt: "say hi"
+  model: claude-sonnet-4-6
+expected_notifications:
+  - kind: output
+    contains: "Hello"
+expected_response:
+  output_contains: "Hello"
+  min_output_len: 5
+  exit_code: 0
+mock:
+  tool: claude
+  mock_scenario: streaming-short

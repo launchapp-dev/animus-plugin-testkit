@@ -1,0 +1,53 @@
+[workspace]
+members = [
+    "crates/testkit-core",
+    "crates/plugin-harness",
+    "crates/plugin-bench",
+    "crates/mock-cli-claude",
+    "crates/mock-cli-codex",
+    "crates/mock-cli-gemini",
+    "crates/mock-cli-opencode",
+    "crates/mock-cli-oai",
+    "crates/provider-conformance",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+authors = ["Sami Shukri <samiziiv@gmail.com>"]
+homepage = "https://github.com/launchapp-dev/animus-plugin-testkit"
+repository = "https://github.com/launchapp-dev/animus-plugin-testkit"
+readme = "README.md"
+
+[workspace.dependencies]
+animus-plugin-protocol   = { git = "https://github.com/launchapp-dev/animus-protocol", tag = "v0.1.9" }
+animus-provider-protocol = { git = "https://github.com/launchapp-dev/animus-protocol", tag = "v0.1.9" }
+animus-plugin-runtime    = { git = "https://github.com/launchapp-dev/animus-protocol", tag = "v0.1.9" }
+
+serde      = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+tokio      = { version = "1", features = ["rt-multi-thread", "macros", "io-util", "io-std", "process", "sync", "time", "fs"] }
+anyhow     = "1"
+thiserror  = "1"
+clap       = { version = "4", features = ["derive"] }
+async-trait = "0.1"
+futures    = "0.3"
+chrono     = { version = "0.4", features = ["serde"] }
+once_cell  = "1"
+
+# CLI mock helpers
+axum  = "0.7"
+tower = "0.4"
+
+# Benchmarks
+criterion = { version = "0.5", features = ["html_reports"] }
+
+# Terminal output
+colored = "2"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

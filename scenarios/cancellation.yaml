@@ -1,0 +1,16 @@
+name: cancellation
+description: |
+  SKIPPED in v0.1.0. The protocol's `agent/cancel` needs a session id from a
+  mid-flight `agent/run`, which the harness's single-request loop cannot issue
+  without spawning a side task. Re-enable in v0.2.0 when the harness grows a
+  concurrent dispatcher.
+timeout_ms: 1000
+method: run
+request:
+  prompt: "irrelevant"
+  model: claude-sonnet-4-6
+requires_capabilities:
+  - "$harness/cancellation-loop-v2"
+mock:
+  tool: claude
+  mock_scenario: cancellation

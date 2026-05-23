@@ -1,0 +1,30 @@
+[package]
+name = "plugin-harness"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+description = "Conformance harness for Animus provider plugins."
+
+[[bin]]
+name = "animus-plugin-harness"
+path = "src/main.rs"
+
+[dependencies]
+testkit-core = { path = "../testkit-core" }
+animus-plugin-protocol   = { workspace = true }
+animus-provider-protocol = { workspace = true }
+serde      = { workspace = true }
+serde_json = { workspace = true }
+tokio      = { workspace = true }
+anyhow     = { workspace = true }
+thiserror  = { workspace = true }
+clap       = { workspace = true }
+colored    = { workspace = true }
+chrono     = { workspace = true }
+
+tempfile = "3"
+
+[dev-dependencies]
