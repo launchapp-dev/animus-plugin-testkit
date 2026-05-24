@@ -752,28 +752,28 @@ dependencies = [
 
 [[package]]
 name = "mock-cli-claude"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "mock-cli-codex"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "mock-cli-gemini"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "mock-cli-oai"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -785,7 +785,7 @@ dependencies = [
 
 [[package]]
 name = "mock-cli-opencode"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde_json",
 ]
@@ -859,7 +859,7 @@ dependencies = [
 
 [[package]]
 name = "plugin-bench"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "animus-plugin-protocol",
  "animus-provider-protocol",
@@ -877,7 +877,7 @@ dependencies = [
 
 [[package]]
 name = "plugin-harness"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "animus-plugin-protocol",
  "animus-provider-protocol",
@@ -914,7 +914,7 @@ dependencies = [
 
 [[package]]
 name = "provider-conformance"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "once_cell",
@@ -1182,7 +1182,7 @@ dependencies = [
 
 [[package]]
 name = "testkit-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "animus-provider-protocol",
  "anyhow",

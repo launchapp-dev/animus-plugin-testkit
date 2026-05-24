@@ -1,3 +1,4 @@
+use std::net::TcpListener as StdTcpListener;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
@@ -5,6 +6,7 @@ use anyhow::{Context, Result};
 use tempfile::TempDir;
 use tokio::io::{AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, Command};
+use tokio::time::{sleep, Duration};
 
 /// Live plugin process plus its stdio handles.
 pub struct PluginRunner {
@@ -15,6 +17,10 @@ pub struct PluginRunner {
     pub stderr: Option<tokio::process::ChildStderr>,
     #[allow(dead_code)]
     shim_dir: Option<TempDir>,
+    /// Background mock-oai HTTP server kept alive for the duration of this
+    /// plugin run. Dropping the `Child` terminates the server.
+    #[allow(dead_code)]
+    oai_server: Option<Child>,
 }
 
 impl PluginRunner {
@@ -61,6 +67,31 @@ impl PluginRunner {
         }
         cmd.env("ANIMUS_TESTKIT", "1");
 
+        // Stand up the mock-oai HTTP server on a free port so the oai plugin
+        // can be exercised without real OPENAI_API_KEY credentials.
+        let oai_server = if let Some(oai_bin) = mock_binary(&workspace_root, "mock-oai") {
+            let port = find_free_port()?;
+            let mut server = Command::new(&oai_bin);
+            server
+                .env("MOCK_OAI_PORT", port.to_string())
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null());
+            if let Some(scenario) = mock_scenario {
+                server.env("MOCK_SCENARIO", scenario);
+            }
+            let child = server
+                .spawn()
+                .with_context(|| format!("spawn mock-oai from {}", oai_bin.display()))?;
+            // Give axum a moment to bind before the plugin tries to connect.
+            wait_for_port(port).await;
+            cmd.env("OPENAI_API_KEY", "mock-oai-test-key");
+            cmd.env("OPENAI_BASE_URL", format!("http://127.0.0.1:{port}/v1"));
+            Some(child)
+        } else {
+            None
+        };
+
         cmd.stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -78,6 +109,7 @@ impl PluginRunner {
             stdout,
             stderr,
             shim_dir,
+            oai_server,
         })
     }
 
@@ -87,6 +119,9 @@ impl PluginRunner {
         let _ =
             tokio::time::timeout(std::time::Duration::from_millis(750), self.child.wait()).await;
         let _ = self.child.kill().await;
+        if let Some(mut server) = self.oai_server.take() {
+            let _ = server.kill().await;
+        }
     }
 }
 
@@ -105,6 +140,25 @@ fn mock_binary(workspace_root: &Path, name: &str) -> Option<PathBuf> {
         workspace_root.join("target/debug").join(name),
     ];
     candidates.into_iter().find(|p| p.is_file())
+}
+
+fn find_free_port() -> Result<u16> {
+    let listener = StdTcpListener::bind("127.0.0.1:0").context("bind ephemeral port")?;
+    let port = listener.local_addr()?.port();
+    drop(listener);
+    Ok(port)
+}
+
+async fn wait_for_port(port: u16) {
+    for _ in 0..40 {
+        if tokio::net::TcpStream::connect(("127.0.0.1", port))
+            .await
+            .is_ok()
+        {
+            return;
+        }
+        sleep(Duration::from_millis(25)).await;
+    }
 }
 
 /// Build a temp directory containing copies of the mock binaries named
