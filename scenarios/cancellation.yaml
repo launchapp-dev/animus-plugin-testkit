@@ -1,13 +1,16 @@
 name: cancellation
 description: |
-  SKIPPED in v0.1.0. The protocol's `agent/cancel` needs a session id from a
-  mid-flight `agent/run`, which the harness's single-request loop cannot issue
-  without spawning a side task. Re-enable in v0.2.0 when the harness grows a
-  concurrent dispatcher.
-timeout_ms: 1000
+  Mid-flight cancellation: the harness sends `agent/run`, watches for the
+  first notification to learn the session id, then issues `agent/cancel`
+  via a side-task after `cancel_after_ms`. The plugin should terminate the
+  run with a `BackendError::Cancelled` response (`REQUEST_CANCELLED`,
+  -32002) or emit a non-recoverable `error` notification. Plugins opt in
+  by advertising `$harness/cancellation-loop-v2`.
+timeout_ms: 5000
+cancel_after_ms: 100
 method: run
 request:
-  prompt: "irrelevant"
+  prompt: "stream until cancelled"
   model: claude-sonnet-4-6
 requires_capabilities:
   - "$harness/cancellation-loop-v2"

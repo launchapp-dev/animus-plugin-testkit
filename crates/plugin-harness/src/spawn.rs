@@ -11,7 +11,7 @@ use tokio::time::{sleep, Duration};
 /// Live plugin process plus its stdio handles.
 pub struct PluginRunner {
     pub child: Child,
-    pub stdin: ChildStdin,
+    pub stdin: Option<ChildStdin>,
     pub stdout: BufReader<tokio::process::ChildStdout>,
     #[allow(dead_code)]
     pub stderr: Option<tokio::process::ChildStderr>,
@@ -105,7 +105,7 @@ impl PluginRunner {
 
         Ok(Self {
             child,
-            stdin,
+            stdin: Some(stdin),
             stdout,
             stderr,
             shim_dir,
@@ -114,8 +114,9 @@ impl PluginRunner {
     }
 
     pub async fn shutdown(mut self) {
-        let _ = self.stdin.shutdown().await;
-        drop(self.stdin);
+        if let Some(mut stdin) = self.stdin.take() {
+            let _ = stdin.shutdown().await;
+        }
         let _ =
             tokio::time::timeout(std::time::Duration::from_millis(750), self.child.wait()).await;
         let _ = self.child.kill().await;

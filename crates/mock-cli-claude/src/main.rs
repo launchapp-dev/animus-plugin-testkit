@@ -28,6 +28,7 @@ fn main() {
         "tool-call-parallel" => stream_tool_parallel(&session_id),
         "error-recovery" => stream_error_recovery(&session_id),
         "resume-session" => stream_short(&session_id),
+        "cancellation" => stream_cancellation(&session_id),
         _ => stream_short(&session_id),
     };
 
@@ -145,6 +146,15 @@ fn stream_tool_parallel(session_id: &str) -> String {
     }));
     delta(session_id, "complete.");
     "Parallel ops: complete.".to_string()
+}
+
+fn stream_cancellation(session_id: &str) -> String {
+    delta(session_id, "tick0 ");
+    for i in 1..50 {
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        delta(session_id, &format!("tick{i} "));
+    }
+    "tick".to_string()
 }
 
 fn stream_error_recovery(session_id: &str) -> String {

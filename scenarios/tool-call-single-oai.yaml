@@ -1,0 +1,26 @@
+name: tool-call-single-oai
+description: |
+  Single tool_call where the host owns tool execution + result submission.
+  The OpenAI Chat Completions API is stateless — the plugin emits exactly one
+  ToolCall notification and never a ToolResult. The host (animus daemon) is
+  responsible for routing the tool call through its tool registry and posting
+  a follow-up `tool` message on the next turn. Plugins opt in by declaring
+  `$harness/oai-style` in their initialize capabilities.
+timeout_ms: 10000
+method: run
+request:
+  prompt: "list files"
+  model: gpt-4o-mini
+requires_capabilities:
+  - "$harness/oai-style"
+expected_notifications:
+  - kind: output
+  - kind: tool_call
+    name: shell
+  - kind: output
+expected_response:
+  output_contains: "done"
+  exit_code: 0
+mock:
+  tool: oai
+  mock_scenario: tool-call-single

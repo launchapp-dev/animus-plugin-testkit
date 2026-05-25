@@ -1,0 +1,25 @@
+name: tool-call-parallel-oai
+description: |
+  Two parallel tool_calls in the same assistant turn. Host owns execution;
+  plugin emits only ToolCall notifications, never ToolResult. See
+  tool-call-single-oai for the rationale.
+timeout_ms: 10000
+method: run
+request:
+  prompt: "run parallel"
+  model: gpt-4o-mini
+requires_capabilities:
+  - "$harness/oai-style"
+expected_notifications:
+  - kind: output
+  - kind: tool_call
+    name: shell
+  - kind: tool_call
+    name: shell
+  - kind: output
+expected_response:
+  output_contains: "complete"
+  exit_code: 0
+mock:
+  tool: oai
+  mock_scenario: tool-call-parallel

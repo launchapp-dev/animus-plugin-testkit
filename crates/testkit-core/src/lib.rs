@@ -46,6 +46,15 @@ pub struct ScenarioFile {
     pub requires_capabilities: Vec<String>,
     #[serde(default)]
     pub method: ScenarioMethod,
+    /// When set, the harness spawns a side-task that issues
+    /// `agent/cancel { session_id }` this many milliseconds after the run
+    /// request is sent. The scenario PASSes if the plugin terminates the
+    /// run with a `BackendError::Cancelled` (`-32002`) error response or
+    /// emits an `error` notification flagged as non-recoverable within the
+    /// scenario `timeout_ms`. Requires the plugin to advertise
+    /// `$harness/cancellation-loop-v2` in its initialize capabilities.
+    #[serde(default)]
+    pub cancel_after_ms: Option<u64>,
 }
 
 fn default_timeout_ms() -> u64 {

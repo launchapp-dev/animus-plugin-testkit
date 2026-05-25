@@ -7,14 +7,15 @@ use animus_plugin_protocol::{
     RpcResponse, PROTOCOL_VERSION,
 };
 use animus_provider_protocol::{
-    AgentNotification, AgentRunResponse, METHOD_AGENT_RESUME, METHOD_AGENT_RUN,
-    NOTIFICATION_AGENT_ERROR, NOTIFICATION_AGENT_OUTPUT, NOTIFICATION_AGENT_THINKING,
-    NOTIFICATION_AGENT_TOOL_CALL, NOTIFICATION_AGENT_TOOL_RESULT,
+    AgentNotification, AgentRunResponse, METHOD_AGENT_CANCEL, METHOD_AGENT_RESUME,
+    METHOD_AGENT_RUN, NOTIFICATION_AGENT_ERROR, NOTIFICATION_AGENT_OUTPUT,
+    NOTIFICATION_AGENT_THINKING, NOTIFICATION_AGENT_TOOL_CALL, NOTIFICATION_AGENT_TOOL_RESULT,
 };
 use anyhow::{anyhow, Context, Result};
 use chrono::Utc;
 use serde_json::{json, Value};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+use tokio::sync::{mpsc, watch};
 use tokio::time::timeout;
 
 use testkit_core::{
@@ -27,10 +28,14 @@ const HOST_NAME: &str = "animus-plugin-harness";
 const HOST_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 async fn send_frame(runner: &mut PluginRunner, value: &Value) -> Result<()> {
+    let stdin = runner
+        .stdin
+        .as_mut()
+        .ok_or_else(|| anyhow!("plugin stdin already taken"))?;
     let mut line = serde_json::to_string(value)?;
     line.push('\n');
-    runner.stdin.write_all(line.as_bytes()).await?;
-    runner.stdin.flush().await.ok();
+    stdin.write_all(line.as_bytes()).await?;
+    stdin.flush().await.ok();
     Ok(())
 }
 
@@ -191,27 +196,95 @@ async fn run_scenario(plugin: &Path, scenario: &ScenarioFile) -> TestResult {
         Some(Value::Object(params_map)),
     ))
     .unwrap_or(Value::Null);
-    if let Err(e) = send_frame(&mut runner, &req_value).await {
+
+    let stdin = match runner.stdin.take() {
+        Some(s) => s,
+        None => {
+            runner.shutdown().await;
+            return fail(
+                scenario,
+                started,
+                vec![],
+                None,
+                "stdin already taken".to_string(),
+            );
+        }
+    };
+    let (write_tx, mut write_rx) = mpsc::channel::<Value>(16);
+    let writer_handle = tokio::spawn(async move {
+        let mut stdin = stdin;
+        while let Some(frame) = write_rx.recv().await {
+            let mut line = match serde_json::to_string(&frame) {
+                Ok(s) => s,
+                Err(_) => continue,
+            };
+            line.push('\n');
+            if stdin.write_all(line.as_bytes()).await.is_err() {
+                break;
+            }
+            let _ = stdin.flush().await;
+        }
+        let _ = stdin.shutdown().await;
+    });
+
+    if write_tx.send(req_value).await.is_err() {
+        drop(write_tx);
+        let _ = writer_handle.await;
         runner.shutdown().await;
         return fail(
             scenario,
             started,
             vec![],
             None,
-            format!("send request: {e}"),
+            "send request: writer dropped".to_string(),
         );
     }
+
+    // Concurrent cancel dispatcher: spawn a side-task that waits for the
+    // first notification to learn the session id, then waits the
+    // configured delay before issuing `agent/cancel`.
+    let (sid_tx, sid_rx) = watch::channel(Option::<String>::None);
+    let cancel_handle = scenario.cancel_after_ms.map(|delay_ms| {
+        let write_tx = write_tx.clone();
+        let mut sid_rx = sid_rx.clone();
+        tokio::spawn(async move {
+            let session_id = loop {
+                if let Some(id) = sid_rx.borrow().clone() {
+                    if !id.is_empty() {
+                        break id;
+                    }
+                }
+                if sid_rx.changed().await.is_err() {
+                    return;
+                }
+            };
+            tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+            let cancel_req = serde_json::to_value(RpcRequest::new(
+                999,
+                METHOD_AGENT_CANCEL,
+                Some(json!({ "session_id": session_id })),
+            ))
+            .unwrap_or(Value::Null);
+            let _ = write_tx.send(cancel_req).await;
+        })
+    });
 
     let deadline = Instant::now() + Duration::from_millis(scenario.timeout_ms);
     let mut notifications: Vec<AgentNotification> = Vec::new();
     let mut response: Option<AgentRunResponse> = None;
     let mut diagnostics: Vec<String> = Vec::new();
-    let mut final_error: Option<String> = None;
+    let mut final_error: Option<(String, i32)> = None;
+    let mut observed_session_id: Option<String> = None;
 
     loop {
         let frame = match read_frame(&mut runner, deadline).await {
             Ok(Some(v)) => v,
             Ok(None) => {
+                if let Some(h) = cancel_handle {
+                    h.abort();
+                }
+                drop(write_tx);
+                let _ = writer_handle.await;
                 runner.shutdown().await;
                 return fail(
                     scenario,
@@ -222,6 +295,11 @@ async fn run_scenario(plugin: &Path, scenario: &ScenarioFile) -> TestResult {
                 );
             }
             Err(e) => {
+                if let Some(h) = cancel_handle {
+                    h.abort();
+                }
+                drop(write_tx);
+                let _ = writer_handle.await;
                 runner.shutdown().await;
                 return fail(
                     scenario,
@@ -242,7 +320,7 @@ async fn run_scenario(plugin: &Path, scenario: &ScenarioFile) -> TestResult {
             match parsed {
                 Ok(r) if r.id == Some(json!(request_id)) => {
                     if let Some(err) = r.error {
-                        final_error = Some(format!("{} (code {})", err.message, err.code));
+                        final_error = Some((err.message, err.code));
                     } else if let Some(result_value) = r.result {
                         match serde_json::from_value::<AgentRunResponse>(result_value.clone()) {
                             Ok(parsed_response) => response = Some(parsed_response),
@@ -268,6 +346,14 @@ async fn run_scenario(plugin: &Path, scenario: &ScenarioFile) -> TestResult {
                 continue;
             }
             let params = frame.get("params").cloned().unwrap_or(Value::Null);
+            if observed_session_id.is_none() {
+                if let Some(sid) = params.get("session_id").and_then(Value::as_str) {
+                    if !sid.is_empty() {
+                        observed_session_id = Some(sid.to_string());
+                        let _ = sid_tx.send(Some(sid.to_string()));
+                    }
+                }
+            }
             if let Some(notification) = decode_notification(method_name, &params) {
                 notifications.push(notification);
             } else {
@@ -276,14 +362,59 @@ async fn run_scenario(plugin: &Path, scenario: &ScenarioFile) -> TestResult {
         }
     }
 
+    if let Some(h) = cancel_handle {
+        h.abort();
+    }
+    drop(write_tx);
+    let _ = writer_handle.await;
     runner.shutdown().await;
     let duration_ms = started.elapsed().as_millis() as u64;
 
-    if let Some(err) = final_error {
+    if scenario.cancel_after_ms.is_some() {
+        let cancelled_ok = matches!(
+            &final_error,
+            Some((msg, code)) if *code == animus_plugin_protocol::error_codes::REQUEST_CANCELLED
+                || msg.to_ascii_lowercase().contains("cancel")
+        ) || notifications.iter().any(|n| {
+            matches!(
+                n,
+                AgentNotification::Error {
+                    recoverable: false,
+                    ..
+                }
+            )
+        });
+        if cancelled_ok {
+            return TestResult {
+                scenario: scenario.name.clone(),
+                status: TestStatus::Pass,
+                duration_ms,
+                notification_log: notifications,
+                response,
+                diagnostics,
+            };
+        }
+        let reason = match &final_error {
+            Some((msg, code)) => {
+                format!("expected Cancelled but plugin returned `{msg}` (code {code})")
+            }
+            None => "expected Cancelled but plugin returned a successful response".to_string(),
+        };
+        return TestResult {
+            scenario: scenario.name.clone(),
+            status: TestStatus::Fail { reason },
+            duration_ms,
+            notification_log: notifications,
+            response,
+            diagnostics,
+        };
+    }
+
+    if let Some((msg, code)) = final_error {
         return TestResult {
             scenario: scenario.name.clone(),
             status: TestStatus::Fail {
-                reason: format!("plugin returned error: {err}"),
+                reason: format!("plugin returned error: {msg} (code {code})"),
             },
             duration_ms,
             notification_log: notifications,

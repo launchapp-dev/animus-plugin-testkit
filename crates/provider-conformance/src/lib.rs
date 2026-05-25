@@ -29,6 +29,14 @@ const BASELINE_YAMLS: &[(&str, &str)] = &[
         include_str!("../../../scenarios/tool-call-parallel.yaml"),
     ),
     (
+        "tool-call-single-oai",
+        include_str!("../../../scenarios/tool-call-single-oai.yaml"),
+    ),
+    (
+        "tool-call-parallel-oai",
+        include_str!("../../../scenarios/tool-call-parallel-oai.yaml"),
+    ),
+    (
         "error-recovery",
         include_str!("../../../scenarios/error-recovery.yaml"),
     ),
@@ -65,6 +73,8 @@ mod tests {
         assert!(names.contains(&"streaming-long"));
         assert!(names.contains(&"tool-call-single"));
         assert!(names.contains(&"resume-session"));
-        assert_eq!(scenarios.len(), 8);
+        assert!(names.contains(&"tool-call-single-oai"));
+        assert!(names.contains(&"tool-call-parallel-oai"));
+        assert_eq!(scenarios.len(), 10);
     }
 }

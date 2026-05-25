@@ -1,0 +1,24 @@
+[package]
+name = "trigger-conformance"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+description = "Baseline conformance scenarios for Animus trigger backend plugins."
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+testkit-core = { path = "../testkit-core" }
+animus-plugin-protocol = { workspace = true }
+serde      = { workspace = true }
+serde_json = { workspace = true }
+tokio      = { workspace = true }
+anyhow     = { workspace = true }
+chrono     = { workspace = true }
+tempfile   = "3"
+
+[dev-dependencies]

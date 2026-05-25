@@ -15,7 +15,7 @@ fn all_baseline_scenarios_have_a_mock_hint_or_explicit_skip() {
 }
 
 #[test]
-fn cancellation_is_intentionally_gated_until_v0_2_0() {
+fn cancellation_is_gated_by_harness_capability() {
     let scenarios = baseline_scenarios().expect("scenarios load");
     let cancel = scenarios
         .iter()
@@ -26,7 +26,12 @@ fn cancellation_is_intentionally_gated_until_v0_2_0() {
             .requires_capabilities
             .iter()
             .any(|c| c.starts_with("$harness/")),
-        "cancellation scenario should require a harness-internal capability so all \
-         real plugins SKIP it cleanly"
+        "cancellation scenario should require a harness-internal capability so plugins \
+         that haven't opted in SKIP cleanly"
+    );
+    assert!(
+        cancel.cancel_after_ms.is_some(),
+        "cancellation scenario must set cancel_after_ms so the v0.3.0 concurrent \
+         dispatcher actually issues agent/cancel"
     );
 }

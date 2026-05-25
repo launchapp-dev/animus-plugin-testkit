@@ -12,8 +12,15 @@ description = "Conformance harness for Animus provider plugins."
 name = "animus-plugin-harness"
 path = "src/main.rs"
 
+[[bin]]
+name = "fake-cancellable-plugin"
+path = "src/bin/fake_cancellable_plugin.rs"
+
 [dependencies]
-testkit-core = { path = "../testkit-core" }
+testkit-core           = { path = "../testkit-core" }
+subject-conformance    = { path = "../subject-conformance" }
+transport-conformance  = { path = "../transport-conformance" }
+trigger-conformance    = { path = "../trigger-conformance" }
 animus-plugin-protocol   = { workspace = true }
 animus-provider-protocol = { workspace = true }
 serde      = { workspace = true }

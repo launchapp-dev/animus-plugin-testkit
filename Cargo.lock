@@ -752,28 +752,28 @@ dependencies = [
 
 [[package]]
 name = "mock-cli-claude"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "mock-cli-codex"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "mock-cli-gemini"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "mock-cli-oai"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -785,7 +785,7 @@ dependencies = [
 
 [[package]]
 name = "mock-cli-opencode"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "serde_json",
 ]
@@ -859,7 +859,7 @@ dependencies = [
 
 [[package]]
 name = "plugin-bench"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "animus-plugin-protocol",
  "animus-provider-protocol",
@@ -877,7 +877,7 @@ dependencies = [
 
 [[package]]
 name = "plugin-harness"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "animus-plugin-protocol",
  "animus-provider-protocol",
@@ -887,10 +887,13 @@ dependencies = [
  "colored",
  "serde",
  "serde_json",
+ "subject-conformance",
  "tempfile",
  "testkit-core",
  "thiserror",
  "tokio",
+ "transport-conformance",
+ "trigger-conformance",
 ]
 
 [[package]]
@@ -914,7 +917,7 @@ dependencies = [
 
 [[package]]
 name = "provider-conformance"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "once_cell",
@@ -1151,6 +1154,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
 
 [[package]]
+name = "subject-conformance"
+version = "0.3.0"
+dependencies = [
+ "animus-plugin-protocol",
+ "anyhow",
+ "chrono",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tempfile",
+ "testkit-core",
+ "tokio",
+]
+
+[[package]]
 name = "syn"
 version = "2.0.117"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1182,7 +1200,7 @@ dependencies = [
 
 [[package]]
 name = "testkit-core"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "animus-provider-protocol",
  "anyhow",
@@ -1307,6 +1325,34 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db97caf9d906fbde555dd62fa95ddba9eecfd14cb388e4f491a66d74cd5fb79a"
 dependencies = [
  "once_cell",
+]
+
+[[package]]
+name = "transport-conformance"
+version = "0.3.0"
+dependencies = [
+ "animus-plugin-protocol",
+ "anyhow",
+ "chrono",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "testkit-core",
+ "tokio",
+]
+
+[[package]]
+name = "trigger-conformance"
+version = "0.3.0"
+dependencies = [
+ "animus-plugin-protocol",
+ "anyhow",
+ "chrono",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "testkit-core",
+ "tokio",
 ]
 
 [[package]]
