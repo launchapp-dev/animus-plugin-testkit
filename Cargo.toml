@@ -12,6 +12,9 @@ members = [
     "crates/subject-conformance",
     "crates/transport-conformance",
     "crates/trigger-conformance",
+    "crates/log-storage-conformance",
+    "fixtures/animus-plugin-smoke",
+    "fixtures/animus-provider-mock",
 ]
 resolver = "2"
 
@@ -25,9 +28,15 @@ repository = "https://github.com/launchapp-dev/animus-plugin-testkit"
 readme = "README.md"
 
 [workspace.dependencies]
-animus-plugin-protocol   = { git = "https://github.com/launchapp-dev/animus-protocol", tag = "v0.1.9" }
-animus-provider-protocol = { git = "https://github.com/launchapp-dev/animus-protocol", tag = "v0.1.9" }
-animus-plugin-runtime    = { git = "https://github.com/launchapp-dev/animus-protocol", tag = "v0.1.9" }
+animus-plugin-protocol      = { git = "https://github.com/launchapp-dev/animus-protocol", tag = "v0.1.14" }
+animus-provider-protocol    = { git = "https://github.com/launchapp-dev/animus-protocol", tag = "v0.1.14" }
+animus-plugin-runtime       = { git = "https://github.com/launchapp-dev/animus-protocol", tag = "v0.1.14" }
+animus-subject-protocol     = { git = "https://github.com/launchapp-dev/animus-protocol", tag = "v0.1.14" }
+animus-session-backend      = { git = "https://github.com/launchapp-dev/animus-protocol", tag = "v0.1.14" }
+animus-control-protocol     = { git = "https://github.com/launchapp-dev/animus-protocol", tag = "v0.1.14" }
+animus-trigger-protocol     = { git = "https://github.com/launchapp-dev/animus-protocol", tag = "v0.1.14" }
+animus-transport-protocol   = { git = "https://github.com/launchapp-dev/animus-protocol", tag = "v0.1.14" }
+animus-log-storage-protocol = { git = "https://github.com/launchapp-dev/animus-protocol", tag = "v0.1.14" }
 
 serde      = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -54,3 +63,5 @@ colored = "2"
 [profile.release]
 lto = "thin"
 codegen-units = 1
+
+
