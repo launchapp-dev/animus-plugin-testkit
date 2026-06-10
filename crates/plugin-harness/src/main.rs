@@ -55,6 +55,7 @@ enum Kind {
     Subject,
     Transport,
     Trigger,
+    LogStorage,
 }
 
 #[tokio::main]
@@ -117,6 +118,17 @@ async fn run_conformance(
                 return ExitCode::from(2);
             }
         },
+        Kind::LogStorage => match log_storage_conformance::run_conformance(&plugin).await {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!(
+                    "{} log-storage harness failed: {}",
+                    "error:".red().bold(),
+                    e
+                );
+                return ExitCode::from(2);
+            }
+        },
     };
 
     report::print(&report);
@@ -172,6 +184,12 @@ fn list_scenarios(kind: Kind, scenarios: Option<PathBuf>) -> ExitCode {
         }
         Kind::Trigger => {
             for s in trigger_conformance::baseline_scenarios() {
+                println!("{}\t{}", s.name, s.description);
+            }
+            ExitCode::SUCCESS
+        }
+        Kind::LogStorage => {
+            for s in log_storage_conformance::baseline_scenarios() {
                 println!("{}\t{}", s.name, s.description);
             }
             ExitCode::SUCCESS

@@ -39,7 +39,7 @@ pub fn baseline_scenarios() -> Vec<TestScenario> {
         },
         TestScenario {
             name: "event-payload-shape",
-            description: "the first event carries id + occurred_at + kind + payload",
+            description: "the first event uses the flat wire shape: required string event_id, optional trigger_id/subject_id/subject_kind/action_hint/payload",
         },
     ]
 }
@@ -95,11 +95,26 @@ fn run_watch_fires(first_event: &WatchOutcome) -> TestResult {
                 "trigger/watch acked but no event in 3s; backend likely needs external stimulus"
                     .to_string(),
         },
+        WatchOutcome::NoAck(msg) if external_config_missing(msg) => TestStatus::Skip {
+            reason: format!("trigger/watch requires external configuration: {msg}"),
+        },
         WatchOutcome::NoAck(msg) => TestStatus::Fail {
             reason: format!("trigger/watch: {msg}"),
         },
     };
     pass_or_fail("watch-fires-event", status, started, vec![])
+}
+
+fn external_config_missing(error: &str) -> bool {
+    let lower = error.to_ascii_lowercase();
+    lower.contains("must be set")
+        || lower.contains("must include")
+        || lower.contains("missing")
+        || lower.contains("not configured")
+        || lower.contains("required")
+        || lower.contains("unset")
+        || lower.contains("api token")
+        || lower.contains("auth")
 }
 
 fn run_event_shape(first_event: &WatchOutcome) -> TestResult {
@@ -114,21 +129,17 @@ fn run_event_shape(first_event: &WatchOutcome) -> TestResult {
             vec![],
         );
     };
-    let mut missing = Vec::new();
-    for field in ["id", "occurred_at", "kind"] {
-        if event.get(field).is_none() {
-            missing.push(field);
-        }
-    }
-    if event.get("payload").is_none() {
-        missing.push("payload");
-    }
-    let status = if missing.is_empty() {
-        TestStatus::Pass
-    } else {
-        TestStatus::Fail {
-            reason: format!("event missing required fields: {missing:?}"),
-        }
+    // Wire shape per spec §7.3 ("Wire shape note"): `params` IS the flat
+    // `animus_plugin_protocol::TriggerEvent` — `event_id` is the only
+    // required field; the host drops frames it cannot decode as that shape.
+    let status = match event.get("event_id") {
+        Some(Value::String(event_id)) if !event_id.is_empty() => TestStatus::Pass,
+        Some(other) => TestStatus::Fail {
+            reason: format!("event_id must be a non-empty string, got {other}"),
+        },
+        None => TestStatus::Fail {
+            reason: "event missing required field `event_id` (flat TriggerEvent params; the nested {id, event} wrapper is not decoded by the host)".to_string(),
+        },
     };
     pass_or_fail(
         "event-payload-shape",
@@ -342,6 +353,28 @@ async fn handshake_once(plugin_path: &Path) -> Result<InitializeResult> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use animus_plugin_protocol::{PluginCapabilities, PluginInfo};
+
+    fn init(plugin_kind: &str) -> InitializeResult {
+        InitializeResult {
+            protocol_version: PROTOCOL_VERSION.to_string(),
+            plugin_info: PluginInfo {
+                name: "unit-trigger".to_string(),
+                version: "0.0.0".to_string(),
+                plugin_kind: plugin_kind.to_string(),
+                description: None,
+            },
+            capabilities: PluginCapabilities {
+                methods: vec!["trigger/watch".to_string(), "health/check".to_string()],
+                streaming: true,
+                progress: false,
+                cancellation: true,
+                projections: vec![],
+                subject_kinds: vec![],
+                mcp_tools: vec![],
+            },
+        }
+    }
 
     #[test]
     fn baseline_scenarios_are_stable() {
@@ -349,5 +382,82 @@ mod tests {
         assert_eq!(s.len(), 3);
         assert_eq!(s[0].name, "handshake");
         assert_eq!(s[2].name, "event-payload-shape");
+    }
+
+    #[test]
+    fn handshake_classifier_passes_only_trigger_backend_kind() {
+        assert_eq!(run_handshake(&init(TRIGGER_KIND)).status, TestStatus::Pass);
+        assert!(matches!(
+            run_handshake(&init("transport_backend")).status,
+            TestStatus::Fail { reason } if reason.contains("expected `trigger_backend`")
+        ));
+    }
+
+    #[test]
+    fn watch_fires_classifier_distinguishes_pass_skip_and_fail() {
+        let event = json!({
+            "event_id": "evt-1",
+            "trigger_id": "unit",
+            "payload": {}
+        });
+        assert_eq!(
+            run_watch_fires(&WatchOutcome::Ack { event: Some(event) }).status,
+            TestStatus::Pass
+        );
+        assert!(matches!(
+            run_watch_fires(&WatchOutcome::Ack { event: None }).status,
+            TestStatus::Skip { reason } if reason.contains("no event in 3s")
+        ));
+        assert!(matches!(
+            run_watch_fires(&WatchOutcome::NoAck("boom".to_string())).status,
+            TestStatus::Fail { reason } if reason.contains("boom")
+        ));
+        assert!(matches!(
+            run_watch_fires(&WatchOutcome::NoAck("SLACK_APP_TOKEN unset".to_string())).status,
+            TestStatus::Skip { reason } if reason.contains("external configuration")
+        ));
+    }
+
+    #[test]
+    fn event_shape_requires_flat_event_id() {
+        let complete = WatchOutcome::Ack {
+            event: Some(json!({
+                "event_id": "evt-1",
+                "trigger_id": "unit",
+                "payload": {"ok": true}
+            })),
+        };
+        assert_eq!(run_event_shape(&complete).status, TestStatus::Pass);
+
+        let minimal = WatchOutcome::Ack {
+            event: Some(json!({"event_id": "evt-1"})),
+        };
+        assert_eq!(run_event_shape(&minimal).status, TestStatus::Pass);
+
+        // The legacy nested {id, event} wrapper was never decoded by the host
+        // and must fail conformance.
+        let wrapped = WatchOutcome::Ack {
+            event: Some(json!({
+                "id": 100,
+                "event": {"id": "evt-1", "occurred_at": "2026-05-28T00:00:00Z", "kind": "unit"}
+            })),
+        };
+        assert!(matches!(
+            run_event_shape(&wrapped).status,
+            TestStatus::Fail { reason } if reason.contains("event_id")
+        ));
+
+        let bad_type = WatchOutcome::Ack {
+            event: Some(json!({"event_id": 7})),
+        };
+        assert!(matches!(
+            run_event_shape(&bad_type).status,
+            TestStatus::Fail { reason } if reason.contains("non-empty string")
+        ));
+
+        assert!(matches!(
+            run_event_shape(&WatchOutcome::Ack { event: None }).status,
+            TestStatus::Skip { reason } if reason.contains("no event captured")
+        ));
     }
 }

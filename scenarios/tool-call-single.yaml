@@ -2,6 +2,9 @@ name: tool-call-single
 description: Single tool_use + tool_result round-trip surrounded by output deltas.
 timeout_ms: 10000
 method: run
+skip_if_capabilities:
+  - "$harness/oai-style"
+  - "$harness/no-tool-events"
 request:
   prompt: "list files"
   model: claude-sonnet-4-6

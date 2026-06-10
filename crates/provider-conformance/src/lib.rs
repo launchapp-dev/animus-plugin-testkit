@@ -77,4 +77,78 @@ mod tests {
         assert!(names.contains(&"tool-call-parallel-oai"));
         assert_eq!(scenarios.len(), 10);
     }
+
+    #[test]
+    fn embedded_names_match_scenario_names_in_order() {
+        let scenarios = baseline_scenarios().unwrap();
+        let names: Vec<&str> = scenarios.iter().map(|s| s.name.as_str()).collect();
+        let embedded_names: Vec<&str> = BASELINE_YAMLS.iter().map(|(name, _)| *name).collect();
+        assert_eq!(names, embedded_names);
+    }
+
+    #[test]
+    fn resume_scenario_requires_resume_capability_and_session_id() {
+        let scenarios = baseline_scenarios().unwrap();
+        let resume = scenarios
+            .iter()
+            .find(|s| s.name == "resume-session")
+            .expect("resume-session scenario present");
+        assert_eq!(resume.method, testkit_core::ScenarioMethod::Resume);
+        assert!(resume
+            .request
+            .session_id
+            .as_deref()
+            .is_some_and(|id| !id.is_empty()));
+        assert!(resume
+            .requires_capabilities
+            .iter()
+            .any(|cap| cap == "agent/resume"));
+    }
+
+    #[test]
+    fn oai_scenarios_are_gated_by_oai_style_capability() {
+        let scenarios = baseline_scenarios().unwrap();
+        for scenario in scenarios.iter().filter(|s| s.name.ends_with("-oai")) {
+            assert_eq!(scenario.mock.tool.as_deref(), Some("oai"));
+            assert!(
+                scenario
+                    .requires_capabilities
+                    .iter()
+                    .any(|cap| cap == "$harness/oai-style"),
+                "{} must opt into the stateless OAI harness branch",
+                scenario.name
+            );
+        }
+    }
+
+    #[test]
+    fn mutually_exclusive_tool_scenarios_have_skip_gates() {
+        let scenarios = baseline_scenarios().unwrap();
+        for scenario in scenarios
+            .iter()
+            .filter(|s| s.name.starts_with("tool-call-"))
+        {
+            assert!(
+                scenario
+                    .skip_if_capabilities
+                    .iter()
+                    .any(|cap| cap == "$harness/no-tool-events"),
+                "{} must skip providers that cannot surface tool notifications",
+                scenario.name
+            );
+        }
+        for scenario in scenarios
+            .iter()
+            .filter(|s| s.name == "tool-call-single" || s.name == "tool-call-parallel")
+        {
+            assert!(
+                scenario
+                    .skip_if_capabilities
+                    .iter()
+                    .any(|cap| cap == "$harness/oai-style"),
+                "{} must skip stateless OAI-style providers",
+                scenario.name
+            );
+        }
+    }
 }

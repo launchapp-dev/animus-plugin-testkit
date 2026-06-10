@@ -2,6 +2,9 @@ name: tool-call-parallel
 description: Two concurrent tool_use blocks resolved in one tool_result envelope.
 timeout_ms: 10000
 method: run
+skip_if_capabilities:
+  - "$harness/oai-style"
+  - "$harness/no-tool-events"
 request:
   prompt: "run parallel"
   model: claude-sonnet-4-6

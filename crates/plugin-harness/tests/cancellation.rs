@@ -40,6 +40,7 @@ fn cancellation_scenario() -> ScenarioFile {
         expected_response: ExpectedResponse::default(),
         mock: MockHint::default(),
         requires_capabilities: vec!["$harness/cancellation-loop-v2".to_string()],
+        skip_if_capabilities: vec![],
         method: ScenarioMethod::Run,
         cancel_after_ms: Some(50),
     }

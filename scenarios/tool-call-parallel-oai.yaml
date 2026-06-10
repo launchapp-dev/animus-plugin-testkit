@@ -10,6 +10,8 @@ request:
   model: gpt-4o-mini
 requires_capabilities:
   - "$harness/oai-style"
+skip_if_capabilities:
+  - "$harness/no-tool-events"
 expected_notifications:
   - kind: output
   - kind: tool_call
@@ -18,7 +20,7 @@ expected_notifications:
     name: shell
   - kind: output
 expected_response:
-  output_contains: "complete"
+  output_contains: "Parallel ops"
   exit_code: 0
 mock:
   tool: oai

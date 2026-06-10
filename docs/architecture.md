@@ -34,8 +34,11 @@
   3. Captures the terminal `RpcResponse` and validates against the scenario's
      `expected_notifications` (in-order subsequence) and
      `expected_response`.
-- **`plugin-bench`** — a thin one-shot benchmark loop that measures TTFT,
-  end-to-end duration, and throughput. Uses the same JSON-RPC client wiring.
+- **`plugin-bench`** — a provider benchmark matrix runner that measures TTFT,
+  end-to-end duration, p95 latency, notification counts, output bytes, and
+  throughput across plugin/scenario/model cells. It reuses the same mock
+  process wiring as `plugin-harness`, including the OpenAI-compatible mock
+  server used by OAI/Ollama-style providers.
 - **`mock-cli-*`** — six tiny crates that mimic the real CLIs (`claude`,
   `codex`, `gemini`, `opencode`) and the OAI HTTP surface. Each picks its
   output script from `MOCK_SCENARIO`.

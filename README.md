@@ -10,8 +10,9 @@ account. Every scenario drives the plugin through the same handshake the real
 daemon uses and validates the streaming notification + response shape against
 [`animus-protocol`](https://github.com/launchapp-dev/animus-protocol).
 
-Status: **v0.3.0** — provider, subject, transport, and trigger plugin
-conformance suites; concurrent-cancel dispatcher; oai-style scenario variants.
+Status: **v0.3.0** — provider, subject, transport, trigger, and log-storage
+plugin conformance suites; concurrent-cancel dispatcher; oai-style scenario
+variants.
 
 ## Crates
 
@@ -24,6 +25,7 @@ conformance suites; concurrent-cancel dispatcher; oai-style scenario variants.
 | `subject-conformance`                       | Baseline scenarios for subject backend plugins (5 scenarios).       |
 | `transport-conformance`                     | Baseline scenarios for transport backend plugins (4 scenarios).    |
 | `trigger-conformance`                       | Baseline scenarios for trigger backend plugins (3 scenarios).      |
+| `log-storage-conformance`                   | Baseline scenarios for log storage backend plugins (4 scenarios).  |
 | `mock-cli-claude` / `-codex` / `-gemini` /  | Fake LLM CLIs that emit canonical streams for each scenario.        |
 | `mock-cli-opencode`                         |                                                                     |
 | `mock-cli-oai`                              | Mock OpenAI-compatible HTTP server for `animus-provider-oai`.       |
@@ -39,7 +41,7 @@ cd ../animus-provider-claude
 cargo build --release
 cd -
 
-# 3. Run conformance — provider (default), subject, transport, or trigger.
+# 3. Run conformance — provider (default), subject, transport, trigger, or log-storage.
 ./target/release/animus-plugin-harness conformance \
   --plugin ../animus-provider-claude/target/release/animus-provider-claude
 
@@ -51,6 +53,9 @@ cd -
 
 ./target/release/animus-plugin-harness conformance --kind trigger \
   --plugin ../animus-trigger-webhook/target/release/animus-trigger-webhook
+
+./target/release/animus-plugin-harness conformance --kind log-storage \
+  --plugin ../animus-log-storage-file/target/release/animus-log-storage-file
 
 # 4. (Optional) save a machine-readable report.
 ./target/release/animus-plugin-harness conformance \
@@ -101,7 +106,7 @@ A `fake-cancellable-plugin` test fixture lives at
 exercised by `crates/plugin-harness/tests/cancellation.rs` to verify the
 wire dance end-to-end without depending on any real provider.
 
-## Subject / transport / trigger conformance (v0.3.0)
+## Subject / transport / trigger / log-storage conformance (v0.3.0)
 
 Each is a separate crate that exports `pub fn baseline_scenarios() ->
 Vec<TestScenario>` plus a `pub async fn run_conformance(plugin_path:
@@ -118,10 +123,15 @@ subject-conformance = { git = "https://github.com/launchapp-dev/animus-plugin-te
 | Subject   | `handshake`, `advertise-kinds`, `subject-list`, `subject-crud-round-trip`, `subject-watch-stream` |
 | Transport | `handshake`, `start-shutdown`, `schema-health`, `serve-and-accept`     |
 | Trigger   | `handshake`, `watch-fires-event`, `event-payload-shape`                |
+| Log storage | `handshake`, `schema-health`, `store-query-round-trip`, `tail-replay` |
 
 Trigger backends that need an external stimulus (a webhook POST, a Slack
 message, a cron tick) will SKIP `watch-fires-event` and
 `event-payload-shape`. The handshake still PASSes.
+
+Log-storage conformance runs each scenario in an isolated temporary
+directory and sets `ANIMUS_LOG_FILE_PATH` to a scenario-local JSONL file
+before spawning the plugin.
 
 ## Smoke tests (proof the harness works)
 
@@ -230,12 +240,38 @@ matcher surface.
 ./target/release/animus-plugin-bench \
   --plugin ../animus-provider-claude/target/release/animus-provider-claude \
   --iterations 10 \
-  --mock-scenario streaming-medium
+  --scenario streaming-medium
 ```
 
-Reports TTFT (time-to-first-token), end-to-end duration, and notification
-throughput. There's also a `criterion` micro-bench for the scenario loader
-(`cargo bench -p plugin-bench`).
+The benchmark runner can also compare provider plugins, mock scenarios, and
+model ids as a matrix:
+
+```bash
+./target/release/animus-plugin-bench \
+  --plugin ../animus-provider-claude/target/release/animus-provider-claude \
+  --plugin ../animus-provider-oai/target/release/animus-provider-oai \
+  --suite full \
+  --model claude-sonnet-4-6,gpt-5-mini \
+  --iterations 20 \
+  --warmup 2 \
+  --report-json ./bench-report.json \
+  --report-csv ./bench-summary.csv
+```
+
+Suites:
+
+| Suite | Scenarios |
+| ----- | --------- |
+| `smoke` | `streaming-short` |
+| `streaming` | `streaming-short`, `streaming-medium`, `streaming-long` |
+| `tools` | `tool-call-single`, `tool-call-parallel` |
+| `full` | `streaming`, `tools`, `error-recovery` |
+
+Reports include TTFT (time-to-first-token), end-to-end duration, p95 latency,
+notification count, output bytes, and throughput per
+plugin/scenario/model cell. `--mock-scenario` remains as a backward-compatible
+alias for `--scenario`. There's also a `criterion` micro-bench for the scenario
+loader (`cargo bench -p plugin-bench`).
 
 ## CI Integration
 

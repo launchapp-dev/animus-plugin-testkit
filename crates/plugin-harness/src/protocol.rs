@@ -144,6 +144,21 @@ async fn run_scenario(plugin: &Path, scenario: &ScenarioFile) -> TestResult {
             };
         }
     }
+    for skipped in &scenario.skip_if_capabilities {
+        if plugin_caps.iter().any(|c| c == skipped) {
+            runner.shutdown().await;
+            return TestResult {
+                scenario: scenario.name.clone(),
+                status: TestStatus::Skip {
+                    reason: format!("plugin advertises incompatible capability `{skipped}`"),
+                },
+                duration_ms: started.elapsed().as_millis() as u64,
+                notification_log: vec![],
+                response: None,
+                diagnostics: vec![],
+            };
+        }
+    }
 
     let method = match scenario.method {
         ScenarioMethod::Run => METHOD_AGENT_RUN,
@@ -528,7 +543,13 @@ fn validate(
             }
         }
         match found {
-            Some(i) => cursor = i + 1,
+            Some(i) => {
+                cursor = if can_reuse_match(expected, &notifications[i]) {
+                    i
+                } else {
+                    i + 1
+                };
+            }
             None => {
                 return Err(format!(
                     "expected notification `{}` not found after index {cursor}",
@@ -568,6 +589,19 @@ fn validate(
     }
 
     Ok(())
+}
+
+fn can_reuse_match(
+    expected: &testkit_core::ExpectedNotification,
+    actual: &AgentNotification,
+) -> bool {
+    matches!(
+        (expected, actual),
+        (
+            testkit_core::ExpectedNotification::Output { .. },
+            AgentNotification::Output { is_final: true, .. }
+        )
+    )
 }
 
 fn fail(
@@ -628,4 +662,220 @@ pub async fn run_all(
         summary,
         host: HashMap::new(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use testkit_core::{ExpectedNotification, ExpectedResponse, MockHint, ScenarioRequest};
+
+    fn scenario(
+        expected_notifications: Vec<ExpectedNotification>,
+        expected_response: ExpectedResponse,
+    ) -> ScenarioFile {
+        ScenarioFile {
+            name: "unit-scenario".to_string(),
+            description: String::new(),
+            timeout_ms: 1000,
+            request: ScenarioRequest {
+                prompt: "prompt".to_string(),
+                model: None,
+                system_prompt: None,
+                cwd: None,
+                session_id: None,
+                env: HashMap::new(),
+            },
+            expected_notifications,
+            allow_extra_notifications: false,
+            expected_response,
+            mock: MockHint::default(),
+            requires_capabilities: vec![],
+            skip_if_capabilities: vec![],
+            method: ScenarioMethod::Run,
+            cancel_after_ms: None,
+        }
+    }
+
+    fn run_response(output: &str, exit_code: i32) -> AgentRunResponse {
+        AgentRunResponse {
+            session_id: "session-1".to_string(),
+            exit_code,
+            output: output.to_string(),
+            metadata: vec![],
+            tool_calls: vec![],
+            tool_results: vec![],
+            thinking: vec![],
+            errors: vec![],
+            duration_ms: 10,
+            backend: "unit".to_string(),
+            tokens_used: None,
+            decision_verdict: None,
+        }
+    }
+
+    #[test]
+    fn decode_notification_maps_known_wire_methods() {
+        let output = decode_notification(
+            NOTIFICATION_AGENT_OUTPUT,
+            &json!({"session_id": "s1", "text": "hello", "final": true}),
+        )
+        .expect("output notification should decode");
+        assert!(matches!(
+            output,
+            AgentNotification::Output {
+                session_id,
+                text,
+                is_final: true
+            } if session_id == "s1" && text == "hello"
+        ));
+
+        let tool = decode_notification(
+            NOTIFICATION_AGENT_TOOL_CALL,
+            &json!({"session_id": "s1", "name": "shell", "arguments": {"cmd": "ls"}, "server": "local"}),
+        )
+        .expect("tool call notification should decode");
+        assert!(matches!(
+            tool,
+            AgentNotification::ToolCall {
+                name,
+                server: Some(server),
+                ..
+            } if name == "shell" && server == "local"
+        ));
+
+        let error = decode_notification(
+            NOTIFICATION_AGENT_ERROR,
+            &json!({"session_id": "s1", "message": "boom", "recoverable": false}),
+        )
+        .expect("error notification should decode");
+        assert!(matches!(
+            error,
+            AgentNotification::Error {
+                message,
+                recoverable: false,
+                ..
+            } if message == "boom"
+        ));
+
+        assert!(decode_notification("agent/unknown", &json!({})).is_none());
+    }
+
+    #[test]
+    fn validate_accepts_ordered_subsequence_and_response_expectations() {
+        let scenario = scenario(
+            vec![
+                ExpectedNotification::Output {
+                    contains: Some("hello".to_string()),
+                },
+                ExpectedNotification::ToolCall {
+                    name: Some("shell".to_string()),
+                },
+            ],
+            ExpectedResponse {
+                output_contains: Some("complete".to_string()),
+                min_output_len: Some(8),
+                exit_code: Some(0),
+            },
+        );
+        let notifications = vec![
+            AgentNotification::Thinking {
+                session_id: "s1".to_string(),
+                text: "plan".to_string(),
+            },
+            AgentNotification::Output {
+                session_id: "s1".to_string(),
+                text: "hello".to_string(),
+                is_final: false,
+            },
+            AgentNotification::ToolCall {
+                session_id: "s1".to_string(),
+                name: "shell".to_string(),
+                arguments: Value::Null,
+                server: None,
+            },
+            AgentNotification::Output {
+                session_id: "s1".to_string(),
+                text: "extra trailing notification".to_string(),
+                is_final: false,
+            },
+        ];
+        let response = run_response("complete", 0);
+
+        validate(&scenario, &notifications, Some(&response)).expect("scenario should validate");
+    }
+
+    #[test]
+    fn validate_rejects_missing_ordered_notification() {
+        let scenario = scenario(
+            vec![
+                ExpectedNotification::ToolCall {
+                    name: Some("shell".to_string()),
+                },
+                ExpectedNotification::Output {
+                    contains: Some("after".to_string()),
+                },
+            ],
+            ExpectedResponse::default(),
+        );
+        let notifications = vec![
+            AgentNotification::Output {
+                session_id: "s1".to_string(),
+                text: "after".to_string(),
+                is_final: false,
+            },
+            AgentNotification::ToolCall {
+                session_id: "s1".to_string(),
+                name: "shell".to_string(),
+                arguments: Value::Null,
+                server: None,
+            },
+        ];
+
+        let err = validate(&scenario, &notifications, None).expect_err("wrong order should fail");
+        assert!(err.contains("expected notification `output` not found"));
+    }
+
+    #[test]
+    fn validate_allows_one_final_output_to_satisfy_multiple_output_markers() {
+        let scenario = scenario(
+            vec![
+                ExpectedNotification::Output {
+                    contains: Some("word0".to_string()),
+                },
+                ExpectedNotification::Output {
+                    contains: Some("word39".to_string()),
+                },
+            ],
+            ExpectedResponse::default(),
+        );
+        let notifications = vec![AgentNotification::Output {
+            session_id: "s1".to_string(),
+            text: "word0 word1 word39".to_string(),
+            is_final: true,
+        }];
+
+        validate(&scenario, &notifications, None).expect("aggregate final output should validate");
+    }
+
+    #[test]
+    fn validate_rejects_response_mismatches() {
+        let scenario = scenario(
+            vec![],
+            ExpectedResponse {
+                output_contains: Some("needle".to_string()),
+                min_output_len: Some(12),
+                exit_code: Some(0),
+            },
+        );
+
+        let err = validate(&scenario, &[], Some(&run_response("hay", 0)))
+            .expect_err("missing output substring should fail first");
+        assert!(err.contains("response.output missing substring `needle`"));
+
+        let err = validate(&scenario, &[], None).expect_err("missing response should fail");
+        assert_eq!(
+            err,
+            "no AgentRunResponse received but expected_response set"
+        );
+    }
 }

@@ -27,6 +27,7 @@ fn main() {
         "tool-call-single" => stream_tool_single(),
         "tool-call-parallel" => stream_tool_parallel(),
         "error-recovery" => stream_error_recovery(),
+        "cancellation" => stream_cancellation(),
         _ => stream_short(),
     };
 
@@ -129,4 +130,15 @@ fn stream_error_recovery() -> String {
     let _ = handle.flush();
     emit_partial("recovered.");
     "Working... recovered.".to_string()
+}
+
+fn stream_cancellation() -> String {
+    let mut out = String::new();
+    for i in 0..120 {
+        let chunk = format!("cancel-token-{i} ");
+        emit_partial(&chunk);
+        out.push_str(&chunk);
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    out
 }

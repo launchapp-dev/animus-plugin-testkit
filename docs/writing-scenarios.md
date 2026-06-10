@@ -9,6 +9,8 @@ timeout_ms: integer         # default 10000
 method: run | resume        # default run
 requires_capabilities:      # optional; SKIP if plugin lacks any
   - agent/resume
+skip_if_capabilities:       # optional; SKIP if plugin advertises any
+  - "$harness/no-tool-events"
 request:                    # required
   prompt: string            # required
   model: string             # optional
@@ -53,6 +55,10 @@ Plugins declare the methods they support during `initialize`. If a scenario
 sets `requires_capabilities: [agent/resume]` and the plugin doesn't list
 `agent/resume`, the scenario is **skipped**, not failed. This keeps the
 matrix honest for read-only providers.
+
+If a scenario sets `skip_if_capabilities`, the harness skips it when the
+plugin advertises any listed capability. Use this for mutually exclusive
+harness modes such as stateless OAI providers versus tool-result providers.
 
 ## Adding a new mock scenario
 

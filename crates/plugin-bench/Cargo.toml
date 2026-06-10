@@ -14,6 +14,7 @@ path = "src/main.rs"
 
 [dependencies]
 testkit-core            = { path = "../testkit-core" }
+plugin-harness          = { path = "../plugin-harness" }
 animus-plugin-protocol  = { workspace = true }
 animus-provider-protocol = { workspace = true }
 serde      = { workspace = true }

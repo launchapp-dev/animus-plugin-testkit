@@ -31,6 +31,7 @@ fn main() {
         "tool-call-single" => stream_tool_single(),
         "tool-call-parallel" => stream_tool_parallel(),
         "error-recovery" => stream_error_recovery(),
+        "cancellation" => stream_cancellation(),
         "resume-session" => stream_short(),
         _ => stream_short(),
     }
@@ -147,4 +148,13 @@ fn stream_error_recovery() {
     let _ = writeln!(handle, "{{not-json-at-all");
     let _ = handle.flush();
     emit_agent_chunk("Working... recovered.");
+}
+
+fn stream_cancellation() {
+    let mut buf = String::new();
+    for i in 0..120 {
+        buf.push_str(&format!("cancel-token-{i} "));
+        emit_agent_chunk(&buf);
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
 }

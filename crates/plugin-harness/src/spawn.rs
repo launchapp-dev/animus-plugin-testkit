@@ -87,6 +87,8 @@ impl PluginRunner {
             wait_for_port(port).await;
             cmd.env("OPENAI_API_KEY", "mock-oai-test-key");
             cmd.env("OPENAI_BASE_URL", format!("http://127.0.0.1:{port}/v1"));
+            cmd.env("OLLAMA_API_KEY", "mock-oai-test-key");
+            cmd.env("OLLAMA_BASE_URL", format!("http://127.0.0.1:{port}/v1"));
             Some(child)
         } else {
             None

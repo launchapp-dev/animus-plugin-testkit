@@ -498,6 +498,33 @@ async fn call_method(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use animus_plugin_protocol::{PluginCapabilities, PluginInfo};
+
+    fn init(plugin_kind: &str) -> InitializeResult {
+        InitializeResult {
+            protocol_version: PROTOCOL_VERSION.to_string(),
+            plugin_info: PluginInfo {
+                name: "unit-transport".to_string(),
+                version: "0.0.0".to_string(),
+                plugin_kind: plugin_kind.to_string(),
+                description: None,
+            },
+            capabilities: PluginCapabilities {
+                methods: vec![
+                    "transport/start".to_string(),
+                    "transport/shutdown".to_string(),
+                    "transport/schema".to_string(),
+                    "health/check".to_string(),
+                ],
+                streaming: true,
+                progress: false,
+                cancellation: true,
+                projections: vec![],
+                subject_kinds: vec![],
+                mcp_tools: vec![],
+            },
+        }
+    }
 
     #[test]
     fn baseline_scenarios_are_stable() {
@@ -505,5 +532,33 @@ mod tests {
         assert_eq!(s.len(), 4);
         assert_eq!(s[0].name, "handshake");
         assert_eq!(s[3].name, "serve-and-accept");
+    }
+
+    #[test]
+    fn handshake_classifier_passes_only_transport_backend_kind() {
+        assert_eq!(
+            run_handshake(&init(TRANSPORT_KIND)).status,
+            TestStatus::Pass
+        );
+        assert!(matches!(
+            run_handshake(&init("subject_backend")).status,
+            TestStatus::Fail { reason } if reason.contains("expected `transport_backend`")
+        ));
+    }
+
+    #[test]
+    fn free_port_returns_a_bindable_local_port() {
+        let port = free_port().expect("free port should be allocated");
+        let listener = StdTcpListener::bind(("127.0.0.1", port))
+            .expect("returned port should be bindable after helper drops listener");
+        drop(listener);
+    }
+
+    #[test]
+    fn short_truncates_large_values_for_diagnostics() {
+        let value = json!({ "message": "x".repeat(200) });
+        let rendered = short(&value);
+        assert!(rendered.len() <= 123);
+        assert!(rendered.ends_with('…'));
     }
 }

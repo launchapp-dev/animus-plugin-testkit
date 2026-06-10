@@ -45,6 +45,8 @@ pub struct ScenarioFile {
     #[serde(default)]
     pub requires_capabilities: Vec<String>,
     #[serde(default)]
+    pub skip_if_capabilities: Vec<String>,
+    #[serde(default)]
     pub method: ScenarioMethod,
     /// When set, the harness spawns a side-task that issues
     /// `agent/cancel { session_id }` this many milliseconds after the run
@@ -265,6 +267,18 @@ pub fn load_scenario_dir(dir: &Path) -> Result<Vec<ScenarioFile>, TestkitError> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_dir(name: &str) -> std::path::PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock should be after unix epoch")
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!("animus-testkit-core-{name}-{unique}"));
+        fs::create_dir_all(&path).expect("test temp dir should be created");
+        path
+    }
 
     #[test]
     fn parses_minimal_scenario() {
@@ -283,10 +297,13 @@ expected_response:
 mock:
   tool: claude
   mock_scenario: streaming-short
+skip_if_capabilities:
+  - "$harness/incompatible"
 "#;
         let s: ScenarioFile = serde_yaml::from_str(yaml).unwrap();
         assert_eq!(s.name, "streaming-short");
         assert_eq!(s.expected_notifications.len(), 1);
+        assert_eq!(s.skip_if_capabilities, vec!["$harness/incompatible"]);
     }
 
     #[test]
@@ -304,6 +321,50 @@ mock:
             contains: Some("nope".into()),
         };
         assert!(!bad.matches(&n));
+    }
+
+    #[test]
+    fn matcher_variants_check_their_relevant_fields() {
+        assert!(
+            ExpectedNotification::Thinking.matches(&AgentNotification::Thinking {
+                session_id: "s".into(),
+                text: "thinking".into(),
+            })
+        );
+        assert!(ExpectedNotification::ToolCall {
+            name: Some("shell".into())
+        }
+        .matches(&AgentNotification::ToolCall {
+            session_id: "s".into(),
+            name: "shell".into(),
+            arguments: Value::Null,
+            server: None,
+        }));
+        assert!(!ExpectedNotification::ToolCall {
+            name: Some("browser".into())
+        }
+        .matches(&AgentNotification::ToolCall {
+            session_id: "s".into(),
+            name: "shell".into(),
+            arguments: Value::Null,
+            server: None,
+        }));
+        assert!(
+            ExpectedNotification::ToolResult.matches(&AgentNotification::ToolResult {
+                session_id: "s".into(),
+                name: "shell".into(),
+                output: Value::Null,
+                success: true,
+            })
+        );
+        assert!(ExpectedNotification::Error {
+            recoverable: Some(false)
+        }
+        .matches(&AgentNotification::Error {
+            session_id: "s".into(),
+            message: "terminal".into(),
+            recoverable: false,
+        }));
     }
 
     #[test]
@@ -342,5 +403,38 @@ mock:
         assert_eq!(s.failed, 1);
         assert_eq!(s.skipped, 1);
         assert!(!s.overall_pass());
+    }
+
+    #[test]
+    fn scenario_dir_loads_yaml_files_sorted_by_scenario_name() {
+        let dir = temp_dir("sorted");
+        fs::write(dir.join("z.yaml"), "name: zeta\nrequest:\n  prompt: z\n").unwrap();
+        fs::write(dir.join("a.yml"), "name: alpha\nrequest:\n  prompt: a\n").unwrap();
+        fs::write(
+            dir.join("ignored.txt"),
+            "name: ignored\nrequest:\n  prompt: nope\n",
+        )
+        .unwrap();
+
+        let scenarios = load_scenario_dir(&dir).expect("scenario dir should load");
+        let names: Vec<&str> = scenarios.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, vec!["alpha", "zeta"]);
+
+        fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn load_scenario_rejects_blank_names() {
+        let dir = temp_dir("blank-name");
+        let path = dir.join("blank.yaml");
+        fs::write(&path, "name: '   '\nrequest:\n  prompt: nope\n").unwrap();
+
+        let err = load_scenario(&path).expect_err("blank scenario name should fail");
+        assert!(
+            matches!(err, TestkitError::InvalidScenario(_, ref reason) if reason == "scenario name is empty"),
+            "unexpected error: {err}"
+        );
+
+        fs::remove_dir_all(dir).ok();
     }
 }

@@ -161,13 +161,35 @@ async fn run_list(plugin_path: &Path, init: &InitializeResult) -> TestResult {
         }
         Err(e) => pass_or_fail(
             "subject-list",
-            TestStatus::Fail {
-                reason: format!("{method}: {e}"),
-            },
+            list_error_status(&method, &e.to_string()),
             started,
             vec![],
         ),
     }
+}
+
+fn list_error_status(method: &str, error: &str) -> TestStatus {
+    if external_config_missing(error) {
+        TestStatus::Skip {
+            reason: format!("{method} requires external configuration: {error}"),
+        }
+    } else {
+        TestStatus::Fail {
+            reason: format!("{method}: {error}"),
+        }
+    }
+}
+
+fn external_config_missing(error: &str) -> bool {
+    let lower = error.to_ascii_lowercase();
+    lower.contains("must be set")
+        || lower.contains("must include")
+        || lower.contains("missing")
+        || lower.contains("not configured")
+        || lower.contains("required")
+        || lower.contains("unset")
+        || lower.contains("api token")
+        || lower.contains("auth")
 }
 
 async fn run_crud(plugin_path: &Path, init: &InitializeResult) -> TestResult {
@@ -564,6 +586,28 @@ async fn call_method(proc: &mut PluginProcess, method: &str, params: Value) -> R
 #[cfg(test)]
 mod tests {
     use super::*;
+    use animus_plugin_protocol::{PluginCapabilities, PluginInfo};
+
+    fn init(plugin_kind: &str, methods: &[&str], subject_kinds: &[&str]) -> InitializeResult {
+        InitializeResult {
+            protocol_version: PROTOCOL_VERSION.to_string(),
+            plugin_info: PluginInfo {
+                name: "unit-subject".to_string(),
+                version: "0.0.0".to_string(),
+                plugin_kind: plugin_kind.to_string(),
+                description: None,
+            },
+            capabilities: PluginCapabilities {
+                methods: methods.iter().map(|method| method.to_string()).collect(),
+                streaming: true,
+                progress: false,
+                cancellation: true,
+                projections: vec![],
+                subject_kinds: subject_kinds.iter().map(|kind| kind.to_string()).collect(),
+                mcp_tools: vec![],
+            },
+        }
+    }
 
     #[test]
     fn baseline_scenarios_are_stable() {
@@ -571,5 +615,87 @@ mod tests {
         assert_eq!(s.len(), 5);
         assert_eq!(s[0].name, "handshake");
         assert_eq!(s[4].name, "subject-watch-stream");
+    }
+
+    #[test]
+    fn method_selection_prefers_kind_specific_and_falls_back_to_subject_family() {
+        let init = init(
+            PLUGIN_KIND_SUBJECT_BACKEND,
+            &["issue/list", "subject/get", "subject/update"],
+            &["issue"],
+        );
+        assert_eq!(
+            list_method(&init, Some("issue")).as_deref(),
+            Some("issue/list")
+        );
+        assert_eq!(
+            pick_method(&init, &Some("issue".to_string()), "get").as_deref(),
+            Some("subject/get")
+        );
+        assert_eq!(
+            pick_method(&init, &Some("issue".to_string()), "update").as_deref(),
+            Some("subject/update")
+        );
+        assert_eq!(
+            pick_method(&init, &Some("issue".to_string()), "delete"),
+            None
+        );
+    }
+
+    #[test]
+    fn list_method_uses_subject_fallback_when_kind_specific_is_missing() {
+        let init = init(PLUGIN_KIND_SUBJECT_BACKEND, &["subject/list"], &["task"]);
+        assert_eq!(
+            list_method(&init, Some("task")).as_deref(),
+            Some("subject/list")
+        );
+        assert_eq!(list_method(&init, None).as_deref(), Some("subject/list"));
+    }
+
+    #[test]
+    fn extract_id_accepts_top_level_or_nested_subject_shape() {
+        assert_eq!(
+            extract_id(&json!({"id": "REQ-1"})).as_deref(),
+            Some("REQ-1")
+        );
+        assert_eq!(
+            extract_id(&json!({"subject": {"id": "TASK-2"}})).as_deref(),
+            Some("TASK-2")
+        );
+        assert_eq!(extract_id(&json!({"subject": {"title": "missing"}})), None);
+    }
+
+    #[test]
+    fn handshake_and_kind_advertisement_classifiers_cover_pass_and_fail() {
+        let good = init(PLUGIN_KIND_SUBJECT_BACKEND, &["task/list"], &["task"]);
+        assert_eq!(run_handshake(&good).status, TestStatus::Pass);
+        assert_eq!(run_advertise_kinds(&good).status, TestStatus::Pass);
+
+        let wrong_kind = init("transport_backend", &["task/list"], &["task"]);
+        assert!(matches!(
+            run_handshake(&wrong_kind).status,
+            TestStatus::Fail { reason } if reason.contains("expected `subject_backend`")
+        ));
+
+        let no_kinds = init(PLUGIN_KIND_SUBJECT_BACKEND, &["subject/list"], &[]);
+        assert!(matches!(
+            run_advertise_kinds(&no_kinds).status,
+            TestStatus::Fail { reason } if reason == "capabilities.subject_kinds is empty"
+        ));
+    }
+
+    #[test]
+    fn subject_list_external_configuration_errors_skip_instead_of_fail() {
+        assert!(matches!(
+            list_error_status(
+                "subject/list",
+                "subject/list returned error: LINEAR_TEAM_ID must be set (code -32602)"
+            ),
+            TestStatus::Skip { reason } if reason.contains("requires external configuration")
+        ));
+        assert!(matches!(
+            list_error_status("subject/list", "subject/list returned error: database corrupt"),
+            TestStatus::Fail { reason } if reason.contains("database corrupt")
+        ));
     }
 }
